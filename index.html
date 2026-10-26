@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Follow-ups</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+<style>
+  :root { --teal:#0f766e; --teal-dark:#0b5a54; --saffron:#f59e0b; --bg:#f4f7f7; }
+  body { background:var(--bg); font-family:system-ui,-apple-system,"Segoe UI",sans-serif; }
+  .topbar { background:var(--teal); color:#fff; }
+  .btn-teal { background:var(--teal); color:#fff; border:0; }
+  .btn-teal:hover { background:var(--teal-dark); color:#fff; }
+  .btn-saffron { background:var(--saffron); color:#1f1300; border:0; }
+  .btn-saffron:hover { background:#d98a00; }
+  .card { border:0; box-shadow:0 1px 3px rgba(0,0,0,.08); }
+  .stat { border-left:4px solid var(--saffron); }
+  .stat .num { font-size:1.8rem; font-weight:700; color:var(--teal); }
+  .badge-due { background:var(--saffron); color:#1f1300; }
+  .stage-dot { display:inline-block; width:10px; height:10px; border-radius:50%; background:#cbd5d5; margin-right:3px; }
+  .stage-dot.on { background:var(--teal); }
+  textarea.draft { min-height:170px; }
+  tr.lead-row { cursor:pointer; }
+  .log-item { border-left:3px solid var(--teal); padding-left:.6rem; margin-bottom:.5rem; font-size:.85rem; }
+</style>
+</head>
+<body>
+
+<nav class="topbar py-3 mb-4">
+  <div class="container d-flex align-items-center justify-content-between">
+    <h5 class="m-0"><i class="bi bi-robot me-2"></i>AI Lead Follow-ups</h5>
+    <div>
+      <button class="btn btn-sm btn-outline-light me-2" data-bs-toggle="modal" data-bs-target="#settingsModal"><i class="bi bi-gear"></i> Settings</button>
+      <button class="btn btn-sm btn-saffron" data-bs-toggle="modal" data-bs-target="#leadModal" onclick="openLead()"><i class="bi bi-plus-lg"></i> Add lead</button>
+    </div>
+  </div>
+</nav>
+
+<div class="container pb-5">
+  <div class="row g-3 mb-4" id="stats"></div>
+
+  <div class="card">
+    <div class="card-body">
+      <div class="d-flex flex-wrap gap-2 justify-content-between mb-3">
+        <div class="btn-group btn-group-sm" id="filters">
+          <button class="btn btn-outline-secondary active" data-f="due">Due now</button>
+          <button class="btn btn-outline-secondary" data-f="active">All active</button>
+          <button class="btn btn-outline-secondary" data-f="closed">Closed</button>
+          <button class="btn btn-outline-secondary" data-f="all">Everything</button>
+        </div>
+        <div>
+          <button class="btn btn-sm btn-teal" onclick="draftAllDue()"><i class="bi bi-magic"></i> Draft all due</button>
+          <button class="btn btn-sm btn-outline-secondary" onclick="exportCsv()"><i class="bi bi-download"></i> CSV</button>
+        </div>
+      </div>
+      <div class="table-responsive">
+        <table class="table align-middle">
+          <thead><tr><th>Lead</th><th>Enquiry</th><th>Status</th><th>Sequence</th><th>Next follow-up</th><th></th></tr></thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+      <div id="empty" class="text-center text-muted py-4 d-none">Nothing here yet.</div>
+    </div>
+  </div>
+</div>
+
+<!-- Lead modal -->
+<div class="modal fade" id="leadModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content">
+  <div class="modal-header"><h6 class="modal-title" id="leadTitle">Add lead</h6><button class="btn-close" data-bs-dismiss="modal"></button></div>
+  <div class="modal-body">
+    <input type="hidden" id="l_id">
+    <div class="mb-2"><label class="form-label">Name</label><input id="l_name" class="form-control"></div>
+    <div class="mb-2"><label class="form-label">Business (optional)</label><input id="l_biz" class="form-control"></div>
+    <div class="row g-2 mb-2">
+      <div class="col"><label class="form-label">WhatsApp / phone</label><input id="l_phone" class="form-control" placeholder="9198XXXXXXXX"></div>
+      <div class="col"><label class="form-label">Email</label><input id="l_email" type="email" class="form-control"></div>
+    </div>
+    <div class="mb-2"><label class="form-label">What did they enquire about?</label><textarea id="l_enq" rows="3" class="form-control"></textarea></div>
+    <div class="row g-2">
+      <div class="col"><label class="form-label">Preferred channel</label>
+        <select id="l_channel" class="form-select"><option value="whatsapp">WhatsApp</option><option value="email">Email</option><option value="sms">SMS</option></select></div>
+      <div class="col"><label class="form-label">Language</label>
+        <select id="l_lang" class="form-select"><option>English</option><option>Hindi</option><option>Marathi</option></select></div>
+    </div>
+  </div>
+  <div class="modal-footer"><button class="btn btn-light" data-bs-dismiss="modal">Cancel</button><button class="btn btn-teal" onclick="saveLead()">Save</button></div>
+</div></div></div>
+
+<!-- Follow-up modal -->
+<div class="modal fade" id="fuModal" tabindex="-1"><div class="modal-dialog modal-lg"><div class="modal-content">
+  <div class="modal-header"><h6 class="modal-title" id="fuTitle"></h6><button class="btn-close" data-bs-dismiss="modal"></button></div>
+  <div class="modal-body">
+    <div class="row g-2 mb-2">
+      <div class="col-md-4"><label class="form-label">Channel</label>
+        <select id="f_channel" class="form-select"><option value="whatsapp">WhatsApp</option><option value="email">Email</option><option value="sms">SMS</option></select></div>
+      <div class="col-md-4"><label class="form-label">Tone</label>
+        <select id="f_tone" class="form-select"><option>Friendly</option><option>Professional</option><option>Short & direct</option></select></div>
+      <div class="col-md-4 d-flex align-items-end"><button class="btn btn-saffron w-100" id="genBtn" onclick="generate()"><i class="bi bi-stars"></i> Generate with AI</button></div>
+    </div>
+    <div class="mb-2" id="subjWrap"><label class="form-label">Subject</label><input id="f_subject" class="form-control"></div>
+    <label class="form-label">Message</label>
+    <textarea id="f_msg" class="form-control draft"></textarea>
+    <div class="form-text" id="f_hint"></div>
+    <hr>
+    <div class="fw-semibold mb-2">History</div>
+    <div id="f_log" class="text-muted small">No follow-ups yet.</div>
+  </div>
+  <div class="modal-footer justify-content-between">
+    <div>
+      <button class="btn btn-outline-secondary btn-sm" onclick="setStatus('Replied')">Replied</button>
+      <button class="btn btn-outline-success btn-sm" onclick="setStatus('Won')">Won</button>
+      <button class="btn btn-outline-danger btn-sm" onclick="setStatus('Lost')">Lost</button>
+    </div>
+    <div>
+      <button class="btn btn-light" data-bs-dismiss="modal">Close</button>
+      <button class="btn btn-teal" onclick="sendNow()"><i class="bi bi-send"></i> Send &amp; mark done</button>
+    </div>
+  </div>
+</div></div></div>
+
+<!-- Settings modal -->
+<div class="modal fade" id="settingsModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content">
+  <div class="modal-header"><h6 class="modal-title">Settings</h6><button class="btn-close" data-bs-dismiss="modal"></button></div>
+  <div class="modal-body">
+    <div class="mb-2"><label class="form-label">Your business / sender name</label><input id="s_biz" class="form-control"></div>
+    <div class="mb-2"><label class="form-label">What you offer (1–2 lines, used by the AI)</label><textarea id="s_offer" rows="2" class="form-control"></textarea></div>
+    <div class="mb-2"><label class="form-label">AI endpoint URL (Cloud Function)</label><input id="s_endpoint" class="form-control" placeholder="https://REGION-PROJECT.cloudfunctions.net/generateFollowup"></div>
+    <div class="mb-2"><label class="form-label">Follow-up gaps in days (comma separated)</label><input id="s_gaps" class="form-control" placeholder="1,3,7,14">
+      <div class="form-text">Day gap after each message. One entry = one stage.</div></div>
+  </div>
+  <div class="modal-footer"><button class="btn btn-teal" onclick="saveSettings()">Save</button></div>
+</div></div></div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+/* ---------- Storage adapter (swap these two for Firestore if needed) ---------- */
+const store = {
+  load(k, d){ try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch(e){ return d; } },
+  save(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} }
+};
+let leads = store.load('fu_leads', []);
+let settings = store.load('fu_settings', { biz:'', offer:'', endpoint:'', gaps:'1,3,7,14' });
+let filter = 'due', current = null;
+
+const CLOSED = ['Replied','Won','Lost'];
+const gaps = () => settings.gaps.split(',').map(n => parseInt(n)).filter(n => n > 0);
+const persist = () => store.save('fu_leads', leads);
+const today = () => new Date().toISOString().slice(0,10);
+const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate()+n); return x.toISOString().slice(0,10); };
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const isClosed = l => CLOSED.includes(l.status);
+const isDue = l => !isClosed(l) && l.stage < gaps().length && l.next <= today();
+
+/* ---------- Render ---------- */
+function render(){
+  const active = leads.filter(l => !isClosed(l)), due = leads.filter(isDue);
+  const won = leads.filter(l => l.status === 'Won').length;
+  const replied = leads.filter(l => l.status === 'Replied' || l.status === 'Won').length;
+  document.getElementById('stats').innerHTML = [
+    ['Due now', due.length], ['Active leads', active.length], ['Replied / won', replied], ['Won', won]
+  ].map(([t,n]) => `<div class="col-6 col-md-3"><div class="card stat"><div class="card-body py-3"><div class="text-muted small">${t}</div><div class="num">${n}</div></div></div></div>`).join('');
+
+  let list = leads;
+  if (filter === 'due') list = due;
+  else if (filter === 'active') list = active;
+  else if (filter === 'closed') list = leads.filter(isClosed);
+  list = [...list].sort((a,b) => (a.next||'').localeCompare(b.next||''));
+
+  const n = gaps().length;
+  document.getElementById('rows').innerHTML = list.map(l => `
+    <tr class="lead-row" onclick="openFollowup('${l.id}')">
+      <td><div class="fw-semibold">${esc(l.name)}</div><div class="small text-muted">${esc(l.biz)}</div></td>
+      <td class="small" style="max-width:260px">${esc((l.enq||'').slice(0,90))}</td>
+      <td><span class="badge text-bg-${l.status==='Won'?'success':l.status==='Lost'?'danger':l.status==='Replied'?'info':'secondary'}">${l.status}</span></td>
+      <td>${Array.from({length:n},(_,i)=>`<span class="stage-dot ${i<l.stage?'on':''}"></span>`).join('')}</td>
+      <td>${isClosed(l)||l.stage>=n ? '<span class="text-muted">—</span>' : (isDue(l) ? `<span class="badge badge-due">Due ${esc(l.next)}</span>` : esc(l.next))}</td>
+      <td class="text-end" onclick="event.stopPropagation()">
+        <button class="btn btn-sm btn-outline-secondary" onclick="openLead('${l.id}')"><i class="bi bi-pencil"></i></button>
+        <button class="btn btn-sm btn-outline-danger" onclick="delLead('${l.id}')"><i class="bi bi-trash"></i></button>
+      </td>
+    </tr>`).join('');
+  document.getElementById('empty').classList.toggle('d-none', list.length > 0);
+}
+document.getElementById('filters').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  filter = b.dataset.f;
+  document.querySelectorAll('#filters button').forEach(x => x.classList.toggle('active', x === b));
+  render();
+});
+
+/* ---------- Leads ---------- */
+const modal = id => bootstrap.Modal.getOrCreateInstance(document.getElementById(id));
+function openLead(id){
+  const l = leads.find(x => x.id === id) || {};
+  document.getElementById('leadTitle').textContent = id ? 'Edit lead' : 'Add lead';
+  l_id.value = l.id || ''; l_name.value = l.name || ''; l_biz.value = l.biz || '';
+  l_phone.value = l.phone || ''; l_email.value = l.email || ''; l_enq.value = l.enq || '';
+  l_channel.value = l.channel || 'whatsapp'; l_lang.value = l.lang || 'English';
+  modal('leadModal').show();
+}
+function saveLead(){
+  if (!l_name.value.trim()) return alert('Name is required');
+  const data = { name:l_name.value.trim(), biz:l_biz.value.trim(), phone:l_phone.value.replace(/\D/g,''),
+    email:l_email.value.trim(), enq:l_enq.value.trim(), channel:l_channel.value, lang:l_lang.value };
+  const ex = leads.find(x => x.id === l_id.value);
+  if (ex) Object.assign(ex, data);
+  else leads.push({ id:'l'+Date.now(), ...data, status:'New', stage:0, next:addDays(today(), gaps()[0]||1), log:[], created:today() });
+  persist(); modal('leadModal').hide(); render();
+}
+function delLead(id){ if (confirm('Delete this lead?')) { leads = leads.filter(l => l.id !== id); persist(); render(); } }
+
+/* ---------- Follow-up ---------- */
+function openFollowup(id){
+  current = leads.find(l => l.id === id); if (!current) return;
+  fuTitle.textContent = `Follow-up ${Math.min(current.stage+1, gaps().length)} of ${gaps().length} · ${current.name}`;
+  f_channel.value = current.channel; f_msg.value = ''; f_subject.value = ''; f_hint.textContent = '';
+  subjWrap.classList.toggle('d-none', f_channel.value !== 'email');
+  f_log.innerHTML = current.log.length ? current.log.slice().reverse().map(x =>
+    `<div class="log-item"><b>${esc(x.date)}</b> · ${esc(x.channel)} · stage ${x.stage}<br>${esc(x.msg.slice(0,140))}${x.msg.length>140?'…':''}</div>`).join('') : 'No follow-ups yet.';
+  modal('fuModal').show();
+}
+f_channel.addEventListener('change', () => subjWrap.classList.toggle('d-none', f_channel.value !== 'email'));
+
+function fallback(l, stage, channel){
+  const me = settings.biz || 'our team', first = l.name.split(' ')[0];
+  const t = [
+    `Hi ${first}, thanks for reaching out to ${me}${l.enq?` about "${l.enq.slice(0,60)}"`:''}. Happy to answer any questions — shall we set up a quick call?`,
+    `Hi ${first}, just checking in on your enquiry. I can share a few examples and a rough quote if that helps. Let me know what works for you.`,
+    `Hi ${first}, wanted to follow up once more. We have a few slots open this month and I'd be glad to get you started.`,
+    `Hi ${first}, I'll close your enquiry for now so I don't keep bothering you. If you'd like to continue later, just reply here anytime. Thank you!`
+  ];
+  return { subject:`Following up on your enquiry — ${me}`, message:t[Math.min(stage, t.length-1)] };
+}
+
+async function requestDraft(l, channel, tone){
+  const stage = l.stage + 1, total = gaps().length;
+  if (!settings.endpoint) return { ...fallback(l, l.stage, channel), offline:true };
+  const res = await fetch(settings.endpoint, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ lead:{ name:l.name, business:l.biz, enquiry:l.enq, language:l.lang, history:l.log.map(x => x.msg) },
+      stage, totalStages:total, channel, tone, sender:settings.biz, offer:settings.offer })
+  });
+  if (!res.ok) throw new Error('AI endpoint returned ' + res.status);
+  return res.json();
+}
+
+async function generate(){
+  const btn = genBtn; btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Writing…';
+  try {
+    const r = await requestDraft(current, f_channel.value, f_tone.value);
+    f_msg.value = r.message || ''; f_subject.value = r.subject || '';
+    f_hint.textContent = r.offline ? 'Using a built-in template. Add your AI endpoint in Settings for personalised drafts.' : 'Review and edit before sending.';
+  } catch(e){
+    const r = fallback(current, current.stage, f_channel.value);
+    f_msg.value = r.message; f_subject.value = r.subject;
+    f_hint.textContent = 'AI request failed (' + e.message + '). Template used instead.';
+  }
+  btn.disabled = false; btn.innerHTML = '<i class="bi bi-stars"></i> Generate with AI';
+}
+
+function sendNow(){
+  const msg = f_msg.value.trim(), ch = f_channel.value;
+  if (!msg) return alert('Write or generate a message first');
+  const l = current, enc = encodeURIComponent(msg);
+  if (ch === 'whatsapp') { if (!l.phone) return alert('No phone number'); window.open(`https://wa.me/${l.phone}?text=${enc}`, '_blank'); }
+  else if (ch === 'email') { if (!l.email) return alert('No email address'); window.location.href = `mailto:${l.email}?subject=${encodeURIComponent(f_subject.value)}&body=${enc}`; }
+  else { if (!l.phone) return alert('No phone number'); window.location.href = `sms:+${l.phone}?body=${enc}`; }
+  l.log.push({ date:today(), channel:ch, stage:l.stage+1, msg });
+  l.stage += 1; l.status = 'Contacted'; l.channel = ch;
+  l.next = l.stage < gaps().length ? addDays(today(), gaps()[l.stage]) : '';
+  persist(); modal('fuModal').hide(); render();
+}
+function setStatus(s){ current.status = s; persist(); modal('fuModal').hide(); render(); }
+
+/* ---------- Bulk: draft every due lead, then step through ---------- */
+async function draftAllDue(){
+  const due = leads.filter(isDue);
+  if (!due.length) return alert('No follow-ups are due right now.');
+  alert(`${due.length} follow-up(s) are due. Opening the first one — AI will draft it automatically.`);
+  openFollowup(due[0].id); await generate();
+}
+
+/* ---------- Settings & export ---------- */
+function loadSettings(){ s_biz.value = settings.biz; s_offer.value = settings.offer; s_endpoint.value = settings.endpoint; s_gaps.value = settings.gaps; }
+function saveSettings(){
+  settings = { biz:s_biz.value.trim(), offer:s_offer.value.trim(), endpoint:s_endpoint.value.trim(), gaps:s_gaps.value.trim() || '1,3,7,14' };
+  store.save('fu_settings', settings); modal('settingsModal').hide(); render();
+}
+function exportCsv(){
+  const rows = [['Name','Business','Phone','Email','Status','Stage','Next','Enquiry']].concat(
+    leads.map(l => [l.name,l.biz,l.phone,l.email,l.status,l.stage,l.next,l.enq]));
+  const csv = rows.map(r => r.map(c => `"${String(c??'').replace(/"/g,'""')}"`).join(',')).join('\n');
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], {type:'text/csv'}));
+  a.download = 'leads.csv'; a.click();
+}
+
+loadSettings(); render();
+</script>
+</body>
+</html>
